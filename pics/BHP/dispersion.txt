@@ -1,0 +1,10 @@
+
+	Underdispersion test
+
+data:  fit.mle
+z = -163.99, p-value < 2.2e-16
+alternative hypothesis: true dispersion is less than 1
+sample estimates:
+dispersion 
+ 0.4284178 
+
