@@ -1949,7 +1949,7 @@ plot(x+0.1, dgenpois2(x,mu,alpha),type="h", ylim=c(0,0.35), text.font = 2, lwd=6
 points(x, dgenpois2(x,mu,0),type="h", lwd=6, col=xcol[2])
 points(x-0.1, data/sum(data), type="h", lwd=6, col=xcol[1])
 
-legend("topright", legend = c("Relative frequency", expression(paste("Poisson (",mu,"=2)",sep="")), expression(paste("Generalized Poisson (", mu," = 2, ",alpha, " = -0.09)", sep="" ))), col=xcol,
+legend("topright", legend = c("Empirical frequency", expression(paste("Poisson (",mu,"=2)",sep="")), expression(paste("Generalized Poisson (", mu," = 2, ",alpha, " = -0.09)", sep="" ))), col=xcol,
        lwd = 6, text.font = 2 )
 dev.print(pdf,"pics/CEB_histo.pdf", width=12, height=6)
 ```
@@ -1957,7 +1957,7 @@ dev.print(pdf,"pics/CEB_histo.pdf", width=12, height=6)
 
 ```{r}
 x <- 0:12
-mu <- c(2.3, 2.3, 2.3, 2.3, 2.3, 2.3, 2.3)
+mu <- c(2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0)
 alpha <- c(-0.10,-0.06,-0.03,0,0.03,0.06,0.10)
 xshift <- c(-0.3,-0.2,-0.1,0,0.1,0.2,0.3)
 xcol<-gray.colors(7, start = 0, end = 0.8)
@@ -1967,13 +1967,13 @@ for (i in 1:7){
 }
 legend(7,0.3,
 	c(
-		expression(paste(mu, " = 2.3, ", alpha," = -0.10")),
-		expression(paste(mu, " = 2.3, ", alpha," = -0.06")),
-		expression(paste(mu, " = 2.3, ", alpha," = -0.03")),
-		expression(paste(mu, " = 2.3, ", alpha," =   0.00")),
-		expression(paste(mu, " = 2.3, ", alpha," =   0.03")),
-		expression(paste(mu, " = 2.3, ", alpha," =   0.06")),
-		expression(paste(mu, " = 2.3, ", alpha," =   0.10"))
+		expression(paste(mu, " = 2.0, ", alpha," = -0.10")),
+		expression(paste(mu, " = 2.0, ", alpha," = -0.06")),
+		expression(paste(mu, " = 2.0, ", alpha," = -0.03")),
+		expression(paste(mu, " = 2.0, ", alpha," =   0.00")),
+		expression(paste(mu, " = 2.0, ", alpha," =   0.03")),
+		expression(paste(mu, " = 2.0, ", alpha," =   0.06")),
+		expression(paste(mu, " = 2.0, ", alpha," =   0.10"))
 	), col=xcol, lwd=c(6,6,6,6,6,6,6))
 dev.print(pdf,"pics/GenPois2.pdf", width=16, height=8)
 ```
