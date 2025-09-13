@@ -1,0 +1,1624 @@
+---
+title: SS Prior - Bayesian Hierarchical Generalized Poisson Model
+---
+
+# Load the data
+
+```{r}
+library("haven")
+library("dplyr")
+wm <- read_sav("wm.sav")
+wm <- wm %>% arrange(HH1, HH2, WM3)
+hh <- read_sav("hh.sav")
+df_hh <- hh %>% select(HH1, HH2, HHSEX, HHAGE)
+wm <- merge(x=wm, y=df_hh, by = c("HH1", "HH2"))
+```
+
+
+# Clean the data
+
+(one line of code)
+
+```{r}
+wm <- wm %>% filter(MA1 == 1 & MT1!=9 & MT2!=9 & MT3!=9 & MA2!=98 & MA2!=99 & MA3!=9)
+```
+
+68709 women before cleaning the data
+
+MA1: "Currently married"
+
+```{r}
+table(wm$MA1,useNA="ifany")
+wm <- wm %>% filter(MA1==1)
+```
+    1     3  <NA>
+51426 12951  4332
+
+We exclude 12951 women who have never married and 4332 women with unknown status.
+In total, 17283 samples were excluded.
+
+
+Technology usage (22):
+Missing data: media_newspaper (5), media_radio (3), media_tv(14)
+
+```{r}
+table(wm$MT1,useNA="ifany")
+table(wm$MT2,useNA="ifany")
+table(wm$MT3,useNA="ifany")
+attr(wm$MT1, "labels")
+wm <- wm %>% filter(MT1!=9 & MT2!=9 & MT3!=9)
+```
+
+other wives: (30)
+```{r}
+table(wm$MA3,useNA="ifany")
+wm <- wm %>% filter(MA3!=9)
+```
+
+Age of husband (44)
+(98 for "DK"; 99 for "NO RESPONSE")
+```{r}
+table(wm$MA2,useNA="ifany")
+wm <- wm %>% filter(MA2!=98 & MA2!=99)
+```
+
+HHAGE
+```{r}
+table(wm$HHAGE,useNA="ifany")
+```
+
+No missing values for the following predictors:
+```{r}
+table(wm$HH6,useNA="ifany")
+table(wm$HH7,useNA="ifany")
+table(wm$HH7A,useNA="ifany")
+#table(wm$wmweight,useNA="ifany")
+table(wm$WAGEM,useNA="ifany")
+table(wm$WB4,useNA="ifany")
+table(wm$windex5,useNA="ifany")
+table(wm$welevel,useNA="ifany")
+table(wm$ethnicity,useNA="ifany")
+table(wm$CM11,useNA="ifany")
+```
+
+# Summary
+
+```{r}
+women_age <- wm$WB4
+women_age2 <- women_age^2
+husband_age <- wm$MA2
+#husband_age2 <- husband_age^2
+HH_age <- wm$HHAGE
+#HH_age2 <- wm$HHAGE^2
+women_agem <- wm$WAGEM
+division <- wm$HH7
+ethnicity <- wm$ethnicity # Fixed
+area <- wm$HH6 # Fixed
+women_edu <- wm$welevel
+HH_sex <- wm$HHSEX
+other_wives <- wm$MA3
+windex <- wm$windex5
+media_newspaper <- ifelse(wm$MT1>0, 1, 0)
+media_radio <- ifelse(wm$MT2>0, 1, 0)
+media_tv <- ifelse(wm$MT3>0, 1, 0)
+media <- media_newspaper|media_radio|media_tv
+media <- ifelse(media,1,0)
+# Response variable
+CEB <- wm$CM11
+# District
+district <- wm$HH7A
+# Sampling weight
+wmweight <- wm$wmweight
+
+mean(women_age)
+sd(women_age)
+mean(husband_age)
+sd(husband_age)
+mean(HH_age)
+sd(HH_age)
+mean(women_agem)
+sd(women_agem)
+
+total <- dim(wm)[1]
+table(division)
+round(table(division)/total,4)
+table(area)
+round(table(area)/total,4)
+
+attr(wm$welevel, "labels")
+table(women_edu)
+round(table(women_edu)/total,4)
+
+attr(wm$welevel, "labels")
+table(women_edu)
+round(table(women_edu)/total,4)
+
+attr(wm$HHSEX, "labels")
+table(wm$HHSEX)
+round(table(wm$HHSEX)/total,4)
+
+attr(other_wives, "labels")
+table(other_wives)
+round(table(other_wives)/total,4)
+
+attr(windex, "labels")
+table(windex)
+round(table(windex)/total,4)
+
+table(media)
+round(table(media)/total,4)
+
+attr(wm$ethnicity, "labels")
+table(ethnicity)
+round(table(ethnicity)/total,4)
+```
+
+```{r}
+y <- CEB
+division <- factor(division, levels = c(10,20,30,40,45,50,55,60), labels = c("Barishal", "Chattogram", "Dhaka", "Khulna", "Mymenshing", "Rajshahi", "Rangpur", "Sylhet"))
+division <- relevel(division, ref=3)
+
+division <- model.matrix(~division, data = division)
+colnames(division) <- c(
+  "Dhaka.ref",
+  "Barishal",
+  "Chattogram",
+  "Khulna",
+  "Mymenshing",
+  "Rajshahi",
+  "Rangpur",
+  "Sylhet"
+)
+
+district_names <- c("Bagerhat", "Bandarban", "Barguna", "Barishal", "Bhola", "Bogura", "Brahmanbaria", "Chandpur", "Chapai Nawabganj", "Chattogram", "Chuadanga", "Cox's Bazar", "Cumilla", "Dhaka", "Dinajpur", "Faridpur", "Feni", "Gaibandha", "Gazipur", "Gopalganj", "Habiganj", "Jamalpur", "Jashore", "Jhalokati", "Jhenaidah", "Joypurhat", "Khagrachhari", "Khulna", "Kishoregonj", "Kurigram", "Kushtia", "Lakshmipur", "Lalmonirhat", "Madaripur", "Magura", "Manikganj", "Maulvibazar", "Meherpur", "Munshiganj", "Mymensingh", "Naogaon", "Narail", "Narayangonj", "Narsingdi", "Natore", "Netrokona", "Nilphamari", "Noakhali", "Pabna", "Panchagarh", "Patuakhali", "Pirojpur", "Rajbari", "Rajshahi", "Rangamati", "Rangpur", "Satkhira", "Shariatpur", "Sherpur", "Sirajganj", "Sunamganj", "Sylhet", "Tangail", "Thakurgaon")
+district_codes <- c(1, 3, 4, 6, 9, 10, 12, 13, 15, 18, 19, 22, 26, 27, 29, 30, 32, 33, 35, 36, 38, 39, 41, 42, 44, 46, 47, 48, 49, 50, 51, 52, 54, 55, 56, 57, 58, 59, 61, 64, 65, 67, 68, 69, 70, 72, 73, 75, 76, 77, 78, 79, 81, 82, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94)
+
+district <- factor(district, levels = district_codes, labels = district_names)
+
+women_edu <- factor(women_edu)
+women_edu <- model.matrix(~women_edu, data = women_edu)
+
+windex <- factor(windex)
+windex <- relevel(windex, ref=3)
+windex <- model.matrix(~windex, data = windex)
+colnames(windex) <- c(
+  "windex.Middle.ref",
+  "windex.Poorest",
+  "windex.Poor",
+  "windex.Rich",
+  "windex.Richest"
+)
+
+area <- ifelse(area==2, 0, 1)
+area <- factor(area)
+area <- relevel(area, ref = 1)
+
+other_wives <- ifelse(other_wives==2, 0, 1)
+other_wives <- factor(other_wives)
+
+media <- factor(media)
+media <- relevel(media, ref = 1)
+```
+
+## Helper functions
+
+```{r}
+# Helper functions
+# bisection to find root (copied from VGAM package)
+bisection.basic <-
+	function(f, a, b, tol = 1e-9, nmax = NULL, ...) {
+
+	if (any(is.infinite(b))) {
+		warning("replacing 'b' values of Inf by a large value")
+		b[is.infinite(b)] <- .Machine$double.xmax / 4
+	}
+
+	if (is.null(nmax)) {
+		nmax <- round(log2(max(b - a)) - log2(min(tol))) + 4
+		if (!is.finite(nmax))
+			nmax <- log2(.Machine$double.xmax) - 5
+	}
+	signtest <- (sign(f(a, ...)) * sign(f(b, ...)) <= 0)
+
+	allsign <- all(signtest, na.rm = TRUE)
+	if (!allsign || any(is.na(signtest))){
+		warning("roots do not exist between 'a' and 'b'. ",
+		"Some answers may be misleading.")
+	}
+
+	N <- 1
+	while (N <= nmax) {
+		mid <- (a + b) / 2
+		save.f <- f(mid, ...)
+		if (all(save.f == 0 | (b - a)/2 < tol)) {
+			return(mid)
+		}
+		N <- N + 1
+		vecTF <- sign(save.f) == sign(f(a, ...))
+		a[ vecTF] <- mid[ vecTF]
+		b[!vecTF] <- mid[!vecTF]
+	}
+
+	warning("did not coverge. Returning final root")
+	mid
+}  # bisection.basic
+
+is.Numeric <-
+	function(x, length.arg = Inf,
+		integer.valued = FALSE, positive = FALSE)
+		if (all(is.numeric(x)) && all(is.finite(x)) &&
+		(if (is.finite(length.arg))
+			length(x) == length.arg else TRUE) &&
+		(if (integer.valued) all(x == round(x)) else TRUE) &&
+		(if (positive) all(x>0) else TRUE)) TRUE else FALSE
+```
+
+## Define our genpois2 functions
+
+```{r}
+dgenpois0 <- function(x, theta, lambda = 0, log = FALSE) {
+	if (!is.logical(log.arg <- log) || length(log) != 1)
+		stop("bad input for argument 'log'")
+	rm(log)
+
+	LLL <- max(length(x), length(theta), length(lambda))
+	if (length(x)      != LLL) x      <- rep_len(x,      LLL)
+	if (length(theta)  != LLL) theta  <- rep_len(theta,  LLL)
+	if (length(lambda) != LLL) lambda <- rep_len(lambda, LLL)
+
+	bad0 <- !is.finite(theta) | !is.finite(lambda) |
+		theta < 0 | 1 <= lambda
+	bad <- bad0 | !is.finite(x) | !is.finite(lfactorial(x))
+
+	logpdf <- x + lambda + theta
+
+	if (any(!bad)) {
+		negind <- (theta[!bad] + x[!bad] * lambda[!bad]) < 0
+		logpdf[!bad&!negind] <- -x[!bad&!negind] * lambda[!bad&!negind] - theta[!bad&!negind] +
+			(x[!bad&!negind] - 1) * log(theta[!bad&!negind] + x[!bad&!negind] * lambda[!bad&!negind]) +
+			log(theta[!bad&!negind]) - lfactorial(x[!bad&!negind])
+	}
+
+	if (any(ind1 <- (lambda[!bad] < 0))) {
+		epsilon <- 1.0e-9  # Needed to handle a "<" rather than a "<=".
+		mmm <- pmax(4, floor(theta[!bad]/abs(lambda[!bad]) - epsilon))
+		logpdf[ind1 & mmm < pmax(-1, -theta/mmm)] <- NaN
+		logpdf[ind1 & mmm < x] <- log(0)  # probability 0, not NaN
+	}
+
+	logpdf[!bad0 & is.infinite(x)] <- log(0)
+	logpdf[!bad0 & is.infinite(lfactorial(x))] <- log(0)
+	logpdf[!bad0 & x < 0         ] <- log(0)
+	logpdf[!bad0 & x != round(x) ] <- log(0)
+	logpdf[ bad0] <- NaN
+
+	if (log.arg) logpdf else exp(logpdf)
+}  # dgenpois0
+
+pgenpois0 <-
+	function(q, theta, lambda = 0, lower.tail = TRUE) {
+	q <- floor(q)
+	LLL <- max(length(q), length(theta), length(lambda))
+	if (length(q)      != LLL) q      <- rep_len(q,      LLL)
+	if (length(theta)  != LLL) theta  <- rep_len(theta,  LLL)
+	if (length(lambda) != LLL) lambda <- rep_len(lambda, LLL)
+
+	bad0 <- !is.finite(theta) | !is.finite(lambda) |
+		theta < 0 | 1 <= lambda
+	bad <- bad0 | !is.finite(q)
+
+	if (all(is.finite(lambda)) && all(lambda == 0))
+		return(ppois(q, theta, lower.tail = lower.tail))
+
+	ans <- q + lambda + theta
+	ok3 <- !bad & 0 <= q
+	if (any(ok3)) {
+		ans[ok3] <- mapply(function(q, theta, lambda) {
+			xx <- 0:q
+			if (any(theta + xx * lambda <= 0)){
+				return(1)
+			}else{
+				return(sum(exp(-xx * lambda - theta + log(theta) +
+					(xx - 1) * log(theta + xx * lambda) -
+					lfactorial(xx))))
+			}
+		},
+		q      =      q[ok3],
+		theta  =  theta[ok3],
+		lambda = lambda[ok3])
+		ans <- unlist(ans)
+	}
+	ans[!bad0 & is.infinite(q)] <- 1
+	ans[!bad0 & q < 0         ] <- 0
+	ans[ bad0] <- NaN
+	if (!lower.tail)
+		ans <- 1 - ans
+	ans
+}  # pgenpois0
+
+qgenpois0 <- function(p, theta, lambda = 0) {
+	LLL <- max(length(p), length(theta), length(lambda))
+	if (length(p)      != LLL) p      <- rep_len(p,      LLL)
+	if (length(theta)  != LLL) theta  <- rep_len(theta,  LLL)
+	if (length(lambda) != LLL) lambda <- rep_len(lambda, LLL)
+
+	ans <- p + lambda + theta
+
+	bad0 <- !is.finite(theta) | !is.finite(lambda) |
+		theta < 0  | 1 <= lambda |
+		is.na(p) | is.na(lambda) |
+		is.na(theta)
+	bad <- bad0 | !is.finite(p) | p <= 0 | 1 <= p
+
+	lo <- rep_len(0, LLL) - 0.5
+	approx.ans <- lo  # True at lhs
+	hi <- 2 * lo + 10.5
+	dont.iterate <- bad
+	done <- dont.iterate | p <= pgenpois0(hi, theta, lambda = lambda)
+	iter <- 0
+	max.iter <- round(log2(.Machine$double.xmax)) - 2
+	max.iter <- round(log2(1e300)) - 2
+	while (!all(done) && iter < max.iter) {
+		lo[!done] <- hi[!done]
+		hi[!done] <- 2 * hi[!done] + 10.5  # Bug fixed
+		done[!done] <- (p[!done] <= pgenpois0(hi[!done],
+			theta[!done], lambda = lambda[!done]))
+	  iter <- iter + 1
+	}
+
+	foo <- function(q, theta, lambda, p)
+		pgenpois0(q, theta, lambda = lambda) - p
+
+	lhs <- dont.iterate |
+		p <= dgenpois0(0, theta, lambda = lambda)
+
+
+	if (any(!lhs)) {
+	approx.ans[!lhs] <-
+		bisection.basic(foo, lo[!lhs], hi[!lhs],
+		                tol = 1/16, p = p[!lhs],
+		                theta = theta[!lhs],
+		                lambda = lambda[!lhs])
+	faa <- floor(approx.ans[!lhs])
+	tmp <-
+		ifelse(
+				pgenpois0(faa, theta[!lhs],
+					lambda = lambda[!lhs]) < p[!lhs] &
+				p[!lhs] <= pgenpois0(faa+1, theta[!lhs],
+					lambda = lambda[!lhs]),
+			faa+1,
+			faa)
+	ans[!lhs] <- tmp
+	}  # any(!lhs)
+	vecTF <- !bad0 & !is.na(p) &
+		p <= dgenpois0(0, theta, lambda = lambda)
+	ans[vecTF] <- 0
+
+	ans[!bad0 & !is.na(p) & p == 0] <- 0
+	ans[!bad0 & !is.na(p) & p == 1] <- Inf
+	ans[!bad0 & !is.na(p) & p <  0] <- NaN
+	ans[!bad0 & !is.na(p) & p >  1] <- NaN
+	ans[ bad0] <- NaN
+	ans
+}  # qgenpois0
+
+
+
+rgenpois0 <-
+	function(n, theta, lambda = 0) {
+	use.n <- if ((length.n <- length(n)) > 1) length.n else
+		if (!is.Numeric(n, integer.valued = TRUE,
+			length.arg = 1, positive = TRUE))
+			stop("bad input for argument 'n'") else n
+	if (length(theta) > use.n)
+		warning("length of 'theta' exceeds 'n'. Truncating it.")
+	if (length(lambda) > use.n)
+		warning("length of 'lambda' exceeds 'n'. Truncating it.")
+	theta  <- rep_len(theta,  use.n)
+	lambda <- rep_len(lambda, use.n)
+
+	bad0.a <- !is.finite(lambda) | !is.finite(theta)
+	if (any(bad0.a))
+		stop("cannot have NAs or NaNs in 'theta' or 'lambda'.")
+	bad0.b <- theta <= 0 | 1 <= lambda  # zz theta < 0
+	if (any(bad0.b))
+		stop("some values of 'theta' or 'lambda' are out of range.")
+
+	if (all(lambda == 0))
+		return(rpois(use.n, theta))
+
+	return(qgenpois0(runif(n), theta, lambda = lambda))
+}  # rgenpois0
+
+dgenpois2 <- function(x, meanpar, disppar = 0, log = FALSE) {
+	dgenpois0(x, theta = meanpar / (1 + disppar * meanpar),
+		lambda = disppar * meanpar / (1 + disppar * meanpar),
+		log = log)
+}  # dgenpois2
+
+pgenpois2 <- function(q, meanpar, disppar = 0, lower.tail = TRUE) {
+	pgenpois0(q, theta = meanpar / (1 + disppar * meanpar),
+		lambda = disppar * meanpar / (1 + disppar * meanpar),
+		lower.tail = lower.tail)
+}  # pgenpois2
+
+
+qgenpois2 <- function(p, meanpar, disppar = 0) {
+	qgenpois0(p, theta = meanpar / (1 + disppar * meanpar),
+		lambda = disppar * meanpar / (1 + disppar * meanpar))
+}  # qgenpois2
+
+
+rgenpois2 <- function(n, meanpar, disppar = 0) {
+	rgenpois0(n, theta = meanpar / (1 + disppar * meanpar),
+		lambda = disppar * meanpar / (1 + disppar * meanpar))
+}  # rgenpois2
+```
+
+# Hierarchical Poisson Model
+## Utility functions and data
+```{r}
+#######################utility functions######################
+## mvnormal simulation
+rmvnorm<-function(n,mu,Sigma)
+{
+  E<-matrix(rnorm(n*length(mu)),n,length(mu))
+  t(  t(E%*%chol(Sigma)) +c(mu))
+}
+
+## Wishart simulation
+rwish<-function(n,nu0,S0)
+{
+  sS0 <- chol(S0)
+  S<-array( dim=c( dim(S0),n ) )
+  for(i in 1:n)
+  {
+     Z <- matrix(rnorm(nu0 * dim(S0)[1]), nu0, dim(S0)[1]) %*% sS0
+     S[,,i]<- t(Z)%*%Z
+  }
+  S[,,1:n]
+}
+## mvnorm log density
+ldmvnorm<-function(X,mu,Sigma,iSigma=solve(Sigma),dSigma=det(Sigma))
+{
+  Y<-t( t(X)-mu)
+  sum(diag(-.5*t(Y)%*%Y%*%iSigma))  -
+  .5*(  prod(dim(X))*log(2*pi) +     dim(X)[1]*log(dSigma) )
+}
+## Calculate matrix multiplication: (1,Z) %*% Beta
+matmul <- function(Z, Beta){
+nZ <- nrow(Z)
+as.matrix(cbind(rep(1,nZ),Z))%*%as.matrix(Beta)
+}
+#######################utility functions######################
+
+#######################design matrix##########################
+# Design matrix for all varables (random x14 | fixed x21)
+X <- as.matrix(cbind(
+	### random predictors
+  women_age,
+  women_age2,
+  husband_age,
+  #husband_age2,
+  HH_age,
+  #HH_age2,
+  women_agem,
+  women_edu[,-1],
+  windex[,-1],
+  media,
+  other_wives,
+  area,
+  HH_sex,
+	### fixed predictor
+  division[,-1],# 7
+  ethnicity
+))
+# Design matrix for random variabe
+# (the intercept will be add later)
+Z <- as.matrix(cbind(
+  women_age,
+  women_age2,
+  husband_age,
+  #husband_age2,
+  HH_age,
+  #HH_age2,
+  women_agem,
+  women_edu[,-1],
+  windex[,-1],
+  media,
+  other_wives,
+  area,
+  HH_sex
+))
+
+# Concat response variable y with design matrix of X
+yX <- cbind(y,X)
+#######################design matrix##########################
+```
+
+
+## Init
+
+```{r}
+#######################initial values#########################
+q<-dim(Z)[2] + 1# number of columns in Z (13) + 1 (intercept)
+p<-dim(X)[2] + 1# number of columns in X (20) + 1 (intercept)
+m<-length(unique(district)) # number of district
+
+GAMMA <- matrix(0, nrow = m, ncol = q)
+
+# eta0: inverse-Wishart prior for Sigma
+eta0 <- q+2
+# The initial mean of the MVN prior of theta
+model <- glm(y~., data = data.frame(yX), family=poisson)
+THETA <- mu0 <- model$coefficients
+
+# The initial variance of the MVN prior for the variance of theta
+# LAMBDA is the inverse of Fisher information matrix
+LAMBDA <- vcov(model)
+
+# THETA1 stores m rows of ad hoc estimate of regression coefficients theta1
+THETA1 <- NULL
+
+# traverse each division (total of 8)
+for (dis in district_codes){
+dis_data = yX[which(wm$HH7A==dis),]
+
+captured <- tryCatch({
+	model <- glm(y~., data = data.frame(dis_data), family=poisson)
+	THETA1<-rbind(THETA1, model$coeff[c(1:q)])
+}, warning = function(w) {
+})
+#print(captured)
+}
+
+S0 <- cov(THETA1)
+
+# Prepare the list to store data in each stratum separately.
+y.list <- list()
+Z.list <- list()
+X.list <- list()
+wgt.list <- list()
+N <- NULL
+j <- 1
+# traverse all 8 divisions
+for (dis in district_codes){
+y.list[[j]] = y[which(wm$HH7A == dis)]
+N[[j]]<-length(which(wm$HH7A == dis))
+Z.list[[j]] = Z[which(wm$HH7A == dis),]
+X.list[[j]] = X[which(wm$HH7A == dis),]
+wgt.list[[j]] = wmweight[which(wm$HH7A == dis)]
+j<-j+1
+}
+
+#summary(unlist(N))
+#barplot(unlist(N))
+
+# inverse Lambda_0, inverse S_0
+iL0<-iSigma<-solve(S0)
+
+# Alpha stores the current Alpha vector.
+Alpha <- rep(0,m)
+mu.alpha.0 <- 0
+kappa.0 <- 1
+kappa.m <- 1+m
+nu.0 <- 1
+nu.m <- 1+m
+sigma2.alpha.0 <- 0.0104142
+
+## MCMC
+# The accepted count of proposed gamma_j for each stratum (j from 1 to 66)
+ACCEPT.count <- rep(0,m)
+# The accepted count of proposed theta
+ACCEPT.Theta.count <- 0
+ACCEPT.Alpha.count <- rep(0,m)
+SIGMA.post<-NULL
+GAMMA.post<- list()
+THETA.post <- list()
+ALPHA.post <- NULL
+MU.ALPHA.post <- NULL
+SIGMA2.ALPHA.post <- NULL
+S=55000
+B=5000
+thin=50
+#######################initial values#########################
+```
+
+```{r}
+if(!require(mvtnorm)) install.packages("mvtnorm", dependencies=TRUE)
+library(mvtnorm)
+library(extraDistr)
+
+# Density function for spike and slab prior
+# ps is the proportion of spike
+dCSS <- function(x, df_spike, location_spike, scale_spike, df_slab, location_slab, scale_slab, ps) {
+  spike_density <- dlst(x,df_spike,location_spike,sigma=scale_spike)
+  slab_density <- dlst(x,df_slab,location_slab,sigma=scale_slab)
+  ps * spike_density + (1 - ps) * slab_density
+}
+
+# dCSS is the density function for the spike-and-slab prior, where x is the input value, df_spike and df_slab are the degrees of freedom for the spike and slab Student-t distributions respectively, location_spike and location_slab are the location parameters (means) for the spike and slab respectively, scale_spike and scale_slab are the scale parameters (standard deviations) for the spike and slab respectively, and p_spike is the probability weight of the spike component.
+
+# Cumulative distribution function for spike and slab prior
+pCSS <- function(q, df_spike, location_spike, scale_spike, df_slab, location_slab, scale_slab, ps) {
+  spike_cdf <- plst(q, df_spike, location_spike, scale_spike)
+  slab_cdf <- plst(q, df_slab, location_slab, scale_slab)
+  ps* spike_cdf + (1 - ps) * slab_cdf
+}
+
+# Inverse cumulative distribution function (quantile function) for spike and slab prior
+qCSS <- function(p, df_spike, location_spike, scale_spike, df_slab, location_slab, scale_slab, ps, lower = -10, upper = 10, tol = 1e-8) {
+
+  # Function to find the root of F(q) - p = 0
+  f_root <- function(q) {
+    pCSS(q, df_spike, location_spike, scale_spike, df_slab, location_slab, scale_slab, ps) - p
+  }
+
+  # Use uniroot to find the quantile corresponding to the probability p
+  result <- uniroot(f_root, lower = lower, upper = upper, tol = tol)
+
+  # Return the quantile (root)
+  return(result$root)
+}
+
+x <- seq(-6,6,by=0.1)
+#ys <- dlst(x,df=2,0,0.1)
+#yss <- dlst(x,df=2,0,0.2)
+#ysss <- dlst(x,df=2,0,0.3)
+#yssss <- dlst(x,df=2,0,0.4)
+ys <- dCSS(x,df_spike = 2, location_spike=0, scale_spike=2.8139628, df_slab = 2, location_slab=0, scale_slab = 0.02, ps=0.2)
+yss <- dCSS(x,df_spike = 2, location_spike=0, scale_spike=0.23108825, df_slab = 2, location_slab=0, scale_slab = 0.02, ps=0.2)
+pCSS(-0.5,df_spike = 2, location_spike=0, scale_spike=0.169632, df_slab = 2, location_slab=0, scale_slab = 0.02, ps=0.5)
+pCSS(6,df_spike = 2, location_spike=0, scale_spike=2.054671, df_slab = 2, location_slab=0, scale_slab = 0.02, ps=0.5)
+par(mar=c(4,4.5,1,1),mgp=c(1.88,0.50,0))
+plot(x, ys, type = "l", lty = 1, ylab = "PDF", xlab = "", cex.lab = 2, col = 1, ylim=c(0,20))
+lines(x, yss, lty = 1, col = 2)
+#lines(x, ysss, lty = 1, col = 3)
+#lines(x, yssss, lty = 1, col = 4)
+```
+
+Setup a same variance for all predictors
+```{r}
+df_spike <- 2
+location_spike <- 0
+df_slab <- 2
+location_slab <- 0
+p_spike <- 0.2
+scale_slab <- 0.02 # This is spike, not slab
+
+pmn.theta <- rep(0,p)
+psd.theta <- NULL
+
+# find the scale_spike that makes 95% coverage for [-6,6], (result=3.7411505)
+# Comment out here to save time
+#s <- seq(0.00001, 6, by = 0.00001)
+# for(i in 1:length(s)){
+#   quant <- qCSS(0.975, df_spike, location_spike, s[i], df_slab, location_slab, scale_slab , p_spike)
+#   if(quant > 6){
+#   	cat("q = ", quant, "\n")
+#   	cat("sd = ", s[i], "\n")
+#     break
+#   }
+# }
+#psd.theta[1] <- s[i]
+
+# find the scale_spike that makes 95% coverage for [-1,1], (result=0.620573)
+# Comment out here to save time
+# for(i in 1:length(s)){
+#   quant <- qCSS(0.975, df_spike, location_spike, s[i], df_slab, location_slab, scale_slab , p_spike)
+#   if(quant > 1){
+#     cat("q = ", quant, "\n")
+#     cat("sd = ", s[i], "\n")
+#     break
+#   }
+# }
+# psd.theta[c(2:p)] <- s[i]
+
+#psd.theta <- c(2.054671,rep(0.16963212,p-1))
+
+#when ps=0.2
+psd.theta <- c(3.7411505,rep(0.620573,p-1))
+
+#when ps=0.3
+# psd.theta <- c(2.8139628,rep(0.23108825,p-1))
+```
+
+```{r}
+IMAGEOUT="./pics/BHGP.SS/"
+x <- seq(-1, 1, by = 0.0001)
+#ys1 <- dCSS(x, df_spike, location_spike, 0.16963212, df_slab, location_slab, scale_slab, p_spike)
+
+#xcol<-gray.colors(4, start = 0, end = 0.8)
+xcol<-c(1,2,3,4)
+ys1 <- dCSS(x, df_spike, location_spike, 0.3057556, df_slab, location_slab, scale_slab, p_spike)
+
+par(mar=c(4,4.5,1,1),mgp=c(1.5,-1,0))
+plot(x, dnorm(x, mean=0, sd=0.51022), type="l", lwd = 3, col=xcol[1], ylim=c(0,15), ylab = "Prior densities", xlab = expression(paste(theta[k])), cex.lab = 2)
+lines(x, dlaplace(x, mu=0, sigma=0.33381), lwd = 3, col=xcol[2])
+lines(x, dcauchy(x, location = 0, scale = 0.07871), lwd = 3, col=xcol[3])
+lines(x, ys1, type = "l", lwd = 3, cex.lab = 2, col=xcol[4])
+
+legend(0.05, 12, c(
+	expression(paste("Normal (",sigma,"=0.510)")),
+	expression(paste("Laplace (",sigma,"=0.334)")),
+	expression(paste("Cauchy (",sigma,"=0.079)")),
+	expression(paste("SS (",sigma[l], "=0.621,",sigma[s],"=0.020)"))),
+	 lwd = c(3,3,3,3), col = xcol, cex = 1.5, bty = "n", xpd = TRUE)
+dev.print(pdf, paste(IMAGEOUT, "Priors.Predictors.pdf",sep=""),width=10,height=10)
+```
+
+```{r}
+x <- seq(-6, 6, by = 0.0001)
+#xcol<-gray.colors(4, start = 0, end = 0.8)
+xcol<-c(1,2,3,4)
+ys1 <- dCSS(x, df_spike, location_spike, 3.7411505, df_slab, location_slab, scale_slab, p_spike)
+
+par(mar=c(4,4.5,1,1),mgp=c(1.5,-1,0))
+plot(x, dnorm(x, mean=0, sd=3.06129), type="l", lwd = 3, col=xcol[1], ylab = "Prior densities", xlab = expression(theta[1]), ylim=c(0,15), cex.lab = 2)
+lines(x, dlaplace(x, mu=0, sigma=2.00285), lwd = 3, col=xcol[2])
+lines(x, dcauchy(x, location = 0, scale = 0.47222), lwd = 3, col=xcol[3])
+lines(x, ys1, lwd = 3,  cex.lab = 2, col=xcol[4])
+#lines(x, ys2, lty = 1, col = 2)
+
+legend(0.2, 12, c(
+	expression(paste("Normal (",sigma,"=3.061)")),
+	expression(paste("Laplace (",sigma,"=2.003)")),
+	expression(paste("Cauchy (",sigma,"=0.472)")),
+	expression(paste("SS (",sigma[l], "=3.741,",sigma[s],"=0.020)"))),
+	lwd = c(3,3,3,3), col = xcol, cex = 1.5, bty = "n", xpd = TRUE)
+dev.print(pdf,
+	paste(IMAGEOUT,"Priors.Intercept.pdf",sep=""),
+	width=10,height=10)
+```
+
+
+```{r eval=FALSE}
+#######################simulation#############################
+set.seed(123)
+start.time <- Sys.time()
+for(s in 1:S)
+{
+	##update Sigma
+	iSigma<-rwish(1,eta0+m, solve( S0+t(GAMMA)%*%(GAMMA)) )
+
+	##update sigma_alpha^2
+	s2 <- var(Alpha)
+	sigma2.alpha.m <- 1/nu.m*(nu.0 * sigma2.alpha.0 + (m-1)*s2 + kappa.0*m*(mean(Alpha)-mu.alpha.0)^2/kappa.m )
+	sigma2.alpha <- 1/rgamma(1,shape=nu.m/2, rate=nu.m/2*sigma2.alpha.m)
+	SIGMA2.ALPHA.post <- c(SIGMA2.ALPHA.post,sigma2.alpha)
+
+	##update mu_alpha
+	mu.alpha <- rnorm(1,sum(Alpha)/kappa.m, sqrt(sigma2.alpha/kappa.m))
+	MU.ALPHA.post <- c(MU.ALPHA.post, mu.alpha)
+	## update Alpha
+	K_alpha = rep(15,m)
+  K_alpha[2] <- 40
+  K_alpha[3] <- 20
+  K_alpha[13] <- 5
+  K_alpha[24] <- 20
+  K_alpha[26] <- 20
+  K_alpha[40] <- 5
+  K_alpha[55] <- 20
+	for(j in 1:m)
+	{
+		# beta proposed (beta^(*)) from multivariate normal (beta_j^(s), V_J^(s)
+	  alpha.p <-rnorm(1,Alpha[j],K_alpha[j]*sigma2.alpha)
+	  lr<-sum(
+			wgt.list[[j]] * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],GAMMA[j, ]) + matmul(X.list[[j]],THETA)), disppar=alpha.p, log=TRUE),
+			-wgt.list[[j]] * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],GAMMA[j, ]) + matmul(X.list[[j]],THETA)), disppar=Alpha[j], log=TRUE),
+			dnorm(alpha.p, sigma2.alpha),
+			-dnorm( Alpha[j], sigma2.alpha)
+		)
+
+	  if( is.Numeric(lr) && log(runif(1))<lr ) {
+			ACCEPT.Alpha.count[j] <- ACCEPT.Alpha.count[j]+1
+			Alpha[j]<-alpha.p
+		}
+	}
+
+	##update theta
+	# theta proposed
+	K_theta <- 0.05
+	theta.p<-t(rmvnorm(1,THETA,K_theta*LAMBDA))
+	lr<-0
+	for(j in 1:m)
+	{
+		lr <- lr+sum(
+			wgt.list[[j]] * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],GAMMA[j, ]) + matmul(X.list[[j]],theta.p)), disppar=Alpha[j], log=TRUE),
+			-wgt.list[[j]] * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],GAMMA[j, ]) + matmul(X.list[[j]],THETA)), disppar=Alpha[j], log=TRUE)
+		)
+	}
+	lr <- lr + sum( log(dCSS(theta.p, df_spike, pmn.theta, psd.theta, df_slab, pmn.theta, scale_slab, p_spike))) -sum(log(dCSS(THETA, df_spike, pmn.theta, psd.theta, df_slab, pmn.theta, scale_slab, p_spike)))
+	#print("lr is")
+	#print(lr)
+	if(  is.Numeric(lr) && log(runif(1))<lr ) {# update theta
+		ACCEPT.Theta.count<- ACCEPT.Theta.count+1
+		THETA<-theta.p
+	}
+
+	##update gamma
+	Sigma<-solve(iSigma) ; dSigma<-det(Sigma)
+	K_gamma = rep(0.1,m)
+  K_gamma[9] = 0.05
+  K_gamma[11] = 0.05
+  K_gamma[13] = 0.05
+
+	for(j in 1:m)
+	{
+		# gamma proposed
+	  gamma.p<-t(rmvnorm(1,GAMMA[j,],K_gamma[j]*Sigma))
+	  lr<-sum(
+			wgt.list[[j]] * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],gamma.p) + matmul(X.list[[j]],THETA)), disppar=Alpha[j], log=TRUE),
+			-wgt.list[[j]] * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],GAMMA[j, ]) + matmul(X.list[[j]],THETA)), disppar=Alpha[j], log=TRUE),
+			ldmvnorm( t(gamma.p),rep(0,q),Sigma,iSigma=iSigma,dSigma=dSigma ),
+			-ldmvnorm( t(GAMMA[j,]),rep(0,q),Sigma,iSigma=iSigma,dSigma=dSigma )
+		)
+
+	  if( is.Numeric(lr) && log(runif(1))<lr ) { # update gamma
+			#print(sprintf("Gamma %d Accepted", j ))
+			ACCEPT.count[j] <- ACCEPT.count[j]+1
+			GAMMA[j,]<-gamma.p
+		}
+	}
+
+	##store some output
+	if((s %% thin == 0) & (s > B)) # saving every thin^th value
+	{
+		cat("Current iteration index = ", s, "\n")
+		# Print current acceptance rate
+		cat("Current acceptance rate of Theta = ", round((ACCEPT.Theta.count/s)*100, digits = 2),"\n")
+		cat("Current acceptance rate of Alpha[3] = ", round((ACCEPT.Alpha.count[3]/s)*100, digits = 2),"\n")
+		cat("Current acceptance rate of Alpha[7] = ", round((ACCEPT.Alpha.count[7]/s)*100, digits = 2),"\n")
+		cat("Current acceptance rate of Alpha[9] = ", round((ACCEPT.Alpha.count[9]/s)*100, digits = 2),"\n")
+		# save thinned coefficients
+		THETA.post<-rbind(THETA.post,t(THETA))
+		SIGMA.post<-rbind(SIGMA.post,c(Sigma))
+		ALPHA.post<-rbind(ALPHA.post,c(Alpha))
+		GAMMA.post[[length(GAMMA.post)+1]]<-GAMMA
+	}
+}
+end.time <- Sys.time()
+#######################simulation#############################
+```
+
+## Save and load results
+
+```{r eval=FALSE}
+RESULTPATH = "./data_output/BHGP.SS/"
+save(THETA.post, file=paste(RESULTPATH,"THETA.post.S=",S,".RData",sep=""))
+save(SIGMA.post, file=paste(RESULTPATH,"SIGMA.post.S=",S,".RData",sep=""))
+save(ALPHA.post, file=paste(RESULTPATH,"ALPHA.post.S=",S,".RData",sep=""))
+save(ACCEPT.count, file=paste(RESULTPATH,"ACCEPT.count.S=",S,".RData",sep=""))
+save(ACCEPT.Alpha.count, file=paste(RESULTPATH,"ACCEPT.Alpha.count.S=",S,".RData",sep=""))
+save(ACCEPT.Theta.count, file=paste(RESULTPATH,"ACCEPT.Theta.count.S=",S,".RData",sep=""))
+save(GAMMA, file=paste(RESULTPATH,"GAMMA.S=",S,".RData",sep=""))
+save(GAMMA.post, file=paste(RESULTPATH,"GAMMA.post.S=",S,".RData",sep=""))
+save(MU.ALPHA.post, file=paste(RESULTPATH,"MU.ALPHA.post.S=",S,".RData",sep=""))
+save(SIGMA2.ALPHA.post, file=paste(RESULTPATH,"SIGMA2.ALPHA.post.S=",S,".RData",sep=""))
+```
+
+```{r eval=TRUE}
+RESULTPATH = "./data_output/BHGP.SS/"
+load(paste(RESULTPATH,"THETA.post.S=",S,".RData",sep=""))
+load(paste(RESULTPATH,"SIGMA.post.S=",S,".RData",sep=""))
+load(paste(RESULTPATH,"ALPHA.post.S=",S,".RData",sep=""))
+load(paste(RESULTPATH,"ACCEPT.count.S=",S,".RData",sep=""))
+load(paste(RESULTPATH,"ACCEPT.Alpha.count.S=",S,".RData",sep=""))
+load(paste(RESULTPATH,"ACCEPT.Theta.count.S=",S,".RData",sep=""))
+load(paste(RESULTPATH,"GAMMA.S=",S,".RData",sep=""))
+load(paste(RESULTPATH,"GAMMA.post.S=",S,".RData",sep=""))
+load(paste(RESULTPATH,"MU.ALPHA.post.S=",S,".RData",sep=""))
+load(paste(RESULTPATH,"SIGMA2.ALPHA.post.S=",S,".RData",sep=""))
+```
+
+# Plot results
+
+## Assess the convergence of the Markov chain
+
+```{r}
+## stationarity plot - boxplot
+stationarity.plot<-function(x,...){
+S<-length(x)
+scan<-1:S
+ng<-min( round(S/100),10)
+group<-S*ceiling( ng*scan/S) /ng
+boxplot(x~group,...)
+}
+```
+
+```{r}
+# convert the result (from list) into a 47x(S-B) matrix
+thin2 = 1
+THETA.post.mat <- NULL
+for (i in c(1:dim(THETA.post)[1])){
+	if(i %% thin2 == 0){
+		# Thin again
+		THETA.post.mat <- cbind(THETA.post.mat, as.matrix(unlist(t(THETA.post)[,i])) )
+	}
+}
+GAMMA.post.mat <- list()
+j <- 1
+for (dis in district_codes){
+	gamma_j <- NULL
+	for (s in c(1:length(GAMMA.post))){
+		if(i %% thin2 == 0){
+		# Thin again
+			gamma_j <- rbind(gamma_j, GAMMA.post[[s]][j, ])
+		}
+	}
+	GAMMA.post.mat[[j]] <- gamma_j
+j<-j+1
+}
+# GAMMA.post.mat Usage: matmul(Z, apply(GAMMA.post.mat[[9]],2,mean))
+SIGMA.post.mat <- NULL
+for (i in c(1:dim(SIGMA.post)[1])){
+	if(i %% thin2 == 0){
+		# Thin again
+		SIGMA.post.mat <- cbind(SIGMA.post.mat, SIGMA.post[i,] )
+	}
+}
+
+ACCEPT.count/S
+#stationarity.plot(THETA.post[, 1],xlab="iteration",ylab=expression(theta[11]))
+par(mfrow = c(8, 6), mar=c(3,2,1,1),mgp=c(2,1,0))
+for (i in 1:p) {
+stationarity.plot(THETA.post.mat[i, ],xlab="iteration",ylab=expression(theta))
+}
+dev.print(pdf,
+	paste(IMAGEOUT,"THETA.post.boxplot.pdf",sep=""),
+	width=16,height=12)
+
+# Traceplot
+par(mfrow = c(8, 6), mar=c(3,2,1,1),mgp=c(2,1,0))
+for (i in 1:p) {
+plot(seq(1,dim(THETA.post.mat)[2],by=1), THETA.post.mat[i,], type = "l", xlab = "Iterations", ylab = expression(theta), main=i)
+}
+dev.print(pdf,
+	paste(IMAGEOUT,"THETA.post.pdf",sep=""),
+	width=16,height=12)
+
+# ACF plot
+library(coda)
+par(mfrow = c(8, 6), mar=c(3,2,1,1),mgp=c(2,1,0))
+for (i in 1:p){
+esize <- effectiveSize(THETA.post.mat[i,])
+acf_plot <- acf(THETA.post.mat[i,], plot = FALSE)
+t <- paste(i,",Effective Size: ", esize, sep="")
+plot(acf_plot, xlab=t, ylab="", main=t)
+}
+dev.print(pdf,
+	paste(IMAGEOUT,"ACF.THETA.post.pdf",sep=""),
+	width=16,height=12)
+
+apply(SIGMA.post, 2, effectiveSize)
+
+# index of sigma
+q<-dim(Z)[2] + 1# number of columns in Z + 1 (intercept)
+ind_sigma <- NULL
+for (i in 1:q){
+  ind_sigma <- c(ind_sigma,(i-1)*q+i)
+}
+
+par(mfrow=c(3,6))
+for(i in ind_sigma){
+plot(seq(1,dim(SIGMA.post.mat)[2],by=1), SIGMA.post.mat[i,], type = "l", xlab = "Iterations", ylab = expression(sigma^2), main=i)
+}
+dev.print(pdf,
+	paste(IMAGEOUT,"SIGMA.post.pdf",sep=""),
+	width=16,height=12)
+
+par(mfrow=c(3,6))
+for(i in ind_sigma){
+acf_plot <- acf(SIGMA.post.mat[i,], plot=FALSE)
+	t=paste(i,",Effective Size: ", esize, sep="")
+plot(acf_plot, xlab=t, ylab="", main=expression(paste("acf(",sigma^2,")",sep="")))
+}
+dev.print(pdf,
+	paste(IMAGEOUT,"ACF.SIGMA.post.pdf",sep=""),
+	width=16,height=12)
+
+# Traceplot of alpha
+par(mfrow = c(8, 8), mar=c(3,2,1,1),mgp=c(2,1,0))
+for (i in 1:m) {
+plot(seq(1,dim(ALPHA.post)[1],by=1), ALPHA.post[,i], type = "l", xlab = "Iterations", ylab = expression(theta), main=i)
+}
+dev.print(pdf,
+	paste(IMAGEOUT,"ALPHA.post.pdf",sep=""),
+	width=16,height=12)
+apply(ALPHA.post, 2, effectiveSize)
+
+# ACF plot
+library(coda)
+par(mfrow = c(8, 8), mar=c(3,2,1,1),mgp=c(2,1,0))
+for (i in 1:m){
+esize <- effectiveSize(ALPHA.post[,i])
+acf_plot <- acf(ALPHA.post[,i], plot = FALSE)
+t <- paste(i,",Effective Size: ", esize, sep="")
+plot(acf_plot, xlab=t, ylab="", main=t)
+}
+dev.print(pdf,
+	paste(IMAGEOUT,"ACF.ALPHA.post.pdf",sep=""),
+	width=16,height=12)
+```
+
+### The acceptance rate of each gamma
+
+```{r}
+library(ggplot2)
+index <- 1:m
+df <- data.frame(x = 1:m,
+                 L = rep(0,m),
+                 U = ACCEPT.count/S)
+abc <- ggplot(df, aes(x = x, y = U)) +
+  labs(y = expression(paste("Acceptance rate of ",gamma[j],sep="")), x = NULL) +
+  geom_point(size = 2) +
+  geom_linerange(aes(ymax = U, ymin = L)) +
+	geom_hline(yintercept = 0.2, color = "red", linetype = "dashed", size = 1) +
+  geom_hline(yintercept = 0.5, color = "red", linetype = "dashed", size = 1) +
+  scale_y_continuous(limits = c(0, 0.6)) +
+  scale_x_continuous(breaks = c(1:m), labels = district_names[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 12, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+#dev.print(device = postscript, paste(IMAGEOUT, "E_province.eps",sep=""),width=8,height=8, horizontal = FALSE)
+dev.print(pdf, paste(IMAGEOUT, "ACCEPT.rate.GAMMA.pdf",sep=""),width=16,height=8)
+```
+
+### The acceptance rate of each alpha
+
+```{r}
+index <- 1:m
+df <- data.frame(x = 1:m,
+                 L = rep(0,m),
+                 U = ACCEPT.Alpha.count/S)
+abc <- ggplot(df, aes(x = x, y = U)) +
+  labs(y = expression(paste("Acceptance rate of ",alpha[j],sep="")), x = NULL) +
+  geom_point(size = 2) +
+  geom_linerange(aes(ymax = U, ymin = L)) +
+	geom_hline(yintercept = 0.2, color = "red", linetype = "dashed", size = 1) +
+  geom_hline(yintercept = 0.5, color = "red", linetype = "dashed", size = 1) +
+  scale_y_continuous(limits = c(0, 0.6)) +
+  scale_x_continuous(breaks = c(1:m), labels = district_names[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 12, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+#dev.print(device = postscript, paste(IMAGEOUT, "E_province.eps",sep=""),width=8,height=8, horizontal = FALSE)
+dev.print(pdf, paste(IMAGEOUT, "ACCEPT.rate.ALPHA.pdf",sep=""),width=16,height=8)
+```
+
+### Posterior estimates with 95% credible intervals (CI) of the incidence rate ratio (IRR) for the explanatory variables
+
+```{r}
+library(xtable)
+CI_THETA <- round(t(apply(exp(THETA.post.mat), 1, quantile ,probs=c(0.50, 0.025, 0.975))), digits = 5)
+CI_THETA
+sink(paste(IMAGEOUT,"CI_THETA.tex"))
+xtable(CI_THETA, digits = 3)
+sink()
+```
+
+```{r}
+# BIC_h for the Hierarchical Model
+n<-length(y)
+MLE <- 0
+for(j in 1:m)
+{
+MLE <- MLE + sum(wgt.list[[j]] * dgenpois2(y.list[[j]], meanpar=exp(matmul(Z.list[[j]], apply(GAMMA.post.mat[[j]],2,mean)) + matmul(X.list[[j]],as.matrix(apply(THETA.post.mat, 1, mean)) )),disppar=mean(ALPHA.post[,j]),log=TRUE))
+}
+q<-dim(Z)[2] + 1# number of columns in Z (17) + 1 (intercept)
+p<-dim(X)[2] + 1# number of columns in X (25) + 1 (intercept)
+BIC_h <- (q+1) * log(m) + (p-q+1) * log(n) - 2 * MLE
+print(BIC_h)
+```
+
+## Calculate the expected number of CEB
+
+### Expected Children Ever Born - Woman's age
+
+```{r}
+Xs <- apply(X, 2, mean)
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- matrix(rep(Xs, 35), nrow = 35, byrow = T)
+Xs[,1] <- seq(15, 49, by = 1)
+Xs[,2] <- (seq(15, 49, by = 1)^2)
+colnames(Xs) <- colnames(X)
+Xs = cbind(rep(1,35),Xs) # insert the first column of 1 for intercept
+eXB.post <- exp(Xs%*%THETA.post.mat)
+qE<-apply(t(eXB.post),2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- NULL
+for (v in 15:49){
+	sample_size <- c(sample_size, sum(X[,1]==v))
+}
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-as.character(15:49)
+write.csv(t(qE), paste(IMAGEOUT,"qE.women_age.csv",sep=""))
+
+par(mar=c(4,4.5,1,1),mgp=c(1.88,0.50,0))
+plot( c(15, 49),range(c(0,qE)),type="n",xlab="Woman's age",ylim=c(0,4),
+      ylab="Expected number of children ever born", cex.lab = 2.5, cex.axis = 1.5)
+lines(seq(15, 49, by = 1), qE[1,],col="black",lwd=0.5)
+lines(seq(15, 49, by = 1), qE[2,],col="black",lwd=1.0)
+lines(seq(15, 49, by = 1), qE[3,],col="black",lwd=0.5)
+dev.print(pdf,
+	paste(IMAGEOUT,"E_women_age.pdf",sep=""),
+	width=16,height=16)
+```
+
+### Expected Children Ever Born - Husband's age
+
+```{r}
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[6] <- Xs[5]^2
+Xs <- matrix(rep(Xs, 76), nrow = 76, byrow = T)
+Xs[,3] <- seq(15, 90, by = 1)
+Xs[,4] <- (seq(15, 90, by = 1)^2)
+colnames(Xs) <- colnames(X)
+Xs = cbind(rep(1,76),Xs) # insert the first column of 1 for intercept
+eXB.post <- exp(Xs%*%THETA.post.mat)
+qE<-apply(t(eXB.post),2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- NULL
+for (v in 15:90){
+	sample_size <- c(sample_size, sum(X[,3]==v))
+}
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-as.character(15:90)
+write.csv(t(qE), paste(IMAGEOUT,"qE.husband_age.csv",sep=""))
+
+par(mar=c(4,4.5,1,1),mgp=c(1.88,0.50,0))
+plot( c(15, 90),range(c(0,qE)),type="n",xlab="Husband's age",ylim=c(0,4),
+      ylab="Expected number of children ever born", cex.lab = 2.5, cex.axis = 1.5)
+lines(seq(15, 90, by = 1), qE[1,],col="black",lwd=0.5)
+lines(seq(15, 90, by = 1), qE[2,],col="black",lwd=1.0)
+lines(seq(15, 90, by = 1), qE[3,],col="black",lwd=0.5)
+dev.print(pdf,
+	paste(IMAGEOUT,"E_husband_age.pdf",sep=""),
+	width=16,height=16)
+```
+
+### Expected Children Ever Born - Household head's age
+
+```{r}
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs <- matrix(rep(Xs, 80), nrow = 80, byrow = T)
+Xs[,5] <- seq(16, 95, by = 1)
+Xs[,6] <- (seq(16, 95, by = 1)^2)
+colnames(Xs) <- colnames(X)
+Xs = cbind(rep(1,80),Xs) # insert the first column of 1 for intercept
+eXB.post <- exp(Xs%*%THETA.post.mat)
+qE<-apply(t(eXB.post),2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- NULL
+for (v in 16:95){
+	sample_size <- c(sample_size, sum(X[,5]==v))
+}
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-as.character(16:95)
+write.csv(t(qE), paste(IMAGEOUT,"qE.HH_age.csv",sep=""))
+
+par(mar=c(4,4.5,1,1),mgp=c(1.88,0.50,0))
+plot( c(16, 95),range(c(0,qE)),type="n",xlab="Household head's age",ylim=c(0,4),
+      ylab="Expected number of children ever born", cex.lab = 2.5, cex.axis = 1.5)
+lines(seq(16, 95, by = 1), qE[1,],col="black",lwd=0.5)
+lines(seq(16, 95, by = 1), qE[2,],col="black",lwd=1.0)
+lines(seq(16, 95, by = 1), qE[3,],col="black",lwd=0.5)
+dev.print(pdf,
+	paste(IMAGEOUT,"E_HH_age.pdf",sep=""),
+	width=16,height=16)
+```
+
+### Expected Children Ever Born - Woman's age at marriage
+
+```{r}
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- matrix(rep(Xs, 44), nrow = 44, byrow = T)
+Xs[,7] <- seq(5, 48, by = 1)
+colnames(Xs) <- colnames(X)
+Xs = cbind(rep(1,44),Xs)
+eXB.post <- exp(Xs%*%THETA.post.mat)
+qE<-apply(t(eXB.post),2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- NULL
+for (v in 5:48){
+	sample_size <- c(sample_size, sum(X[,7]==v))
+}
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-as.character(5:48)
+write.csv(t(qE), paste(IMAGEOUT,"qE.women_agem.csv",sep=""))
+
+par(mar=c(4,4.5,1,1),mgp=c(1.88,0.50,0))
+plot( c(5, 48),range(c(0,qE)),type="n",xlab="Woman's age at marriage",ylim=c(0,4),
+      ylab="Expected number of children ever born", cex.lab = 2.5, cex.axis = 1.5)
+lines(seq(5, 48, by = 1), qE[1,],col="black",lwd=0.5)
+lines(seq(5, 48, by = 1), qE[2,],col="black",lwd=1.0)
+lines(seq(5, 48, by = 1), qE[3,],col="black",lwd=0.5)
+dev.print(pdf,
+	paste(IMAGEOUT,"E_women_agem.pdf",sep=""),
+	width=16,height=16)
+```
+
+### Expected Children Ever Born - Division
+
+```{r}
+# Expected Number of Children Ever Born in Bangladesh
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- as.matrix(c(1, Xs))
+eXB.post<- exp(t(t(Xs)%*%THETA.post.mat) )
+qEA<-apply( eXB.post,2,quantile,probs=c(.025,.5,.975))
+round(qEA, digits = 3)
+qEA <- rbind(qEA,dim(X)[1])
+# Division
+
+dnames <- c(
+  "Bangladesh",
+  "Dhaka",
+  "Barishal",
+  "Chattogram",
+  "Khulna",
+  "Mymenshing",
+  "Rajshahi",
+  "Rangpur",
+  "Sylhet"
+)
+
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- matrix(rep(Xs, 8), nrow = 8, byrow = T)
+for (div_index in c(2:8)){
+	x <- rep(0,8)
+	x[div_index] <- 1
+	Xs[,(17+div_index)] <- x
+}
+colnames(Xs) <- colnames(X)
+Xs = cbind(rep(1,8),Xs)
+
+eXB.post<- exp(t(Xs%*%THETA.post.mat) )
+qE<-apply( eXB.post,2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- sum(wm$HH7==30) # count number of women in Herat(reference levels)
+for (HH7 in c(10,20,40,45,50,55,60)){
+	sample_size <- c(sample_size, sum(wm$HH7==HH7))
+}
+qE <- rbind(qE,sample_size)
+
+qE.out <- cbind(qEA,qE)
+colnames(qE.out)<-dnames
+write.csv(t(qE.out), paste(IMAGEOUT,"qE.district.csv",sep=""))
+
+index <- order(qE[2,])
+index <- c(1, index + 1)
+
+library(ggplot2)
+df <- data.frame(x =1:9,
+                 F = qE.out[2,][index],
+                 L = qE.out[1,][index],
+                 U = qE.out[3,][index],
+              name = dnames[index])
+abc <- ggplot(df, aes(x = x, y = F)) +
+  labs(y = "Expected number of children ever born", x = "Divisions") +
+  ylim(1.9,3.0) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(ymax = U, ymin = L)) +
+  scale_x_continuous(breaks = c(1:9), labels = dnames[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 12, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+#dev.print(device = postscript, paste(IMAGEOUT, "E_province.eps",sep=""),width=8,height=8, horizontal = FALSE)
+dev.print(pdf, paste(IMAGEOUT, "E_division.pdf",sep=""),width=8,height=8)
+```
+
+### Expected Children Ever Born - Ethnicity
+
+```{r}
+anames<- c("Bengali", "Other")
+index <- c(1, 2)
+anames[index]
+
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- as.matrix(c(1, Xs))
+Xs <- matrix(rep(Xs, 2), nrow = 2, byrow = T)
+Xs[,27] <- c(1, 2) # 2 for Other, 1 for Bengali
+
+eXB.post<- exp(t(Xs%*%THETA.post.mat) )
+qE<-apply( eXB.post,2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- c(sum(X[,25]==1), sum(X[,25]==2)) # Bengali , Other
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-anames
+write.csv(t(qE), paste(IMAGEOUT,"qE.ethnicity.csv",sep=""))
+
+df <- data.frame(x =1:2,
+                 F = c(qE[2,])[index],
+                 L = c(qE[1,])[index],
+                 U = c(qE[3,])[index])
+abc <- ggplot(df, aes(x = x, y = F)) +
+  labs(y = "Expected number of children ever born", x = "ethnicity") +
+  geom_point(size = 2) +
+  ylim(1.8,2.4) +
+  geom_errorbar(aes(ymax = U, ymin = L)) +
+  scale_x_continuous(breaks = c(1:2), labels = anames[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 18, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+
+dev.print(pdf, paste(IMAGEOUT, "E_ethnicity.pdf",sep=""),width=8,height=8)
+(qE[2,][1] - qE[2,][2])/qE[2,][2]
+```
+
+### Expected Children Ever Born - Area
+
+```{r}
+anames<- c("Rural", "Urban")
+index <- c(1, 2)
+anames[index]
+
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- as.matrix(c(1, Xs))
+Xs <- matrix(rep(Xs, 2), nrow = 2, byrow = T)
+Xs[,18] <- c(1, 2) # 2 for Urban, 1 for Rural
+
+eXB.post<- exp(t(Xs%*%THETA.post.mat) )
+qE<-apply( eXB.post,2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- c(sum(X[,17]==1), sum(X[,17]==2)) # Rural, Urban
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-anames
+write.csv(t(qE), paste(IMAGEOUT,"qE.area.csv",sep=""))
+
+df <- data.frame(x =1:2,
+                 F = c(qE[2,])[index],
+                 L = c(qE[1,])[index],
+                 U = c(qE[3,])[index])
+abc <- ggplot(df, aes(x = x, y = F)) +
+  labs(y = "Expected number of children ever born", x = "Area of residence") +
+  geom_point(size = 2) +
+  ylim(2.2,2.4) +
+  geom_errorbar(aes(ymax = U, ymin = L)) +
+  scale_x_continuous(breaks = c(1:2), labels = anames[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 18, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+
+dev.print(pdf, paste(IMAGEOUT, "E_area.pdf",sep=""),width=8,height=8)
+(qE[2,][1] - qE[2,][2])/qE[2,][2]
+```
+
+### Expected Children Ever Born - Women's education
+
+```{r}
+winames <- c("Pre-primary or none", "Primary", "Secondary", "Higher secondary+")
+index <- c(1, 2, 3, 4)
+winames[index]
+
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- as.matrix(c(1, Xs))
+Xs <- matrix(rep(Xs, 4), nrow = 4, byrow = T)
+Xs[,9] <- c(0, 1, 0, 0)
+Xs[,10] <- c(0, 0, 1, 0)
+Xs[,11] <- c(0, 0, 0, 1)
+
+eXB.post<- exp(t(Xs%*%THETA.post.mat) )
+qE<-apply( eXB.post,2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- NULL
+for (edu in 0:3){
+	sample_size <- c(sample_size, sum(wm$welevel==edu))
+}
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-winames
+write.csv(t(qE), paste(IMAGEOUT,"qE.women_edu.csv",sep=""))
+
+df <- data.frame(x =1:4,
+                 F = c(qE[2,])[index],
+                 L = c(qE[1,])[index],
+                 U = c(qE[3,])[index])
+abc <- ggplot(df, aes(x = x, y = F)) +
+  labs(y = "Expected number of children ever born", x = "Women's education", cex.lab = 2.5, cex.axis = 1.5) +
+  geom_point(size = 2) +
+  ylim(1.9,2.6) +
+  geom_errorbar(aes(ymax = U, ymin = L)) +
+  scale_x_continuous(breaks = c(1:4), labels = winames[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 18, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+
+dev.print(pdf, paste(IMAGEOUT, "E_women_edu.pdf",sep=""),width=8,height=8)
+```
+
+### Expected Children Ever Born - Wealth Index
+
+```{r}
+winames <- c("Middle", "Poorest", "Poor", "Rich", "Richest")
+index <- c(2, 3, 1, 4, 5)
+winames[index]
+
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- as.matrix(c(1, Xs))
+Xs <- matrix(rep(Xs, 5), nrow = 5, byrow = T)
+Xs[,12] <- c(0, 1, 0, 0, 0)
+Xs[,13] <- c(0, 0, 1, 0, 0)
+Xs[,14] <- c(0, 0, 0, 1, 0)
+Xs[,15] <- c(0, 0, 0, 0, 1)
+
+eXB.post<- exp(t(Xs%*%THETA.post.mat) )
+qE<-apply( eXB.post,2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- sum(wm$windex5==3)
+for (wealth in c(1,2,4,5)){
+	sample_size <- c(sample_size, sum(wm$windex5==wealth))
+}
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-winames
+write.csv(t(qE), paste(IMAGEOUT,"qE.windex.csv",sep=""))
+
+df <- data.frame(x =1:5,
+                 F = c(qE[2,])[index],
+                 L = c(qE[1,])[index],
+                 U = c(qE[3,])[index])
+abc <- ggplot(df, aes(x = x, y = F)) +
+  labs(y = "Expected number of children ever born", x = "Wealth index", cex.lab = 2.5, cex.axis = 1.5) +
+  geom_point(size = 2) +
+  ylim(2,2.6) +
+  geom_errorbar(aes(ymax = U, ymin = L)) +
+  scale_x_continuous(breaks = c(1:5), labels = winames) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 18, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+
+dev.print(pdf, paste(IMAGEOUT, "E_windex5.pdf",sep=""),width=8,height=8)
+```
+
+### Expected Children Ever Born - other wives
+
+```{r}
+anames<- c("No", "Yes")
+index <- c(1, 2)
+anames[index]
+
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- as.matrix(c(1, Xs))
+Xs <- matrix(rep(Xs, 2), nrow = 2, byrow = T)
+Xs[,17] <- c(1, 2) # 2 for Yes, 1 for No
+
+eXB.post<- exp(t(Xs%*%THETA.post.mat) )
+qE<-apply( eXB.post,2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- c(sum(X[,16]==1), sum(X[,16]==2)) # No, Yes
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-anames
+write.csv(t(qE), paste(IMAGEOUT,"qE.other_wives.csv",sep=""))
+
+df <- data.frame(x =1:2,
+                 F = c(qE[2,])[index],
+                 L = c(qE[1,])[index],
+                 U = c(qE[3,])[index])
+abc <- ggplot(df, aes(x = x, y = F)) +
+  labs(y = "Expected number of children ever born", x = "other wives") +
+  geom_point(size = 2) +
+  ylim(1.9,2.4) +
+  geom_errorbar(aes(ymax = U, ymin = L)) +
+  scale_x_continuous(breaks = c(1:2), labels = anames[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 18, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+
+dev.print(pdf, paste(IMAGEOUT, "E_other_wives.pdf",sep=""),width=8,height=8)
+(qE[2,][1] - qE[2,][2])/qE[2,][2]
+```
+
+### Expected Children Ever Born - media
+
+```{r}
+anames<- c("No", "Yes")
+index <- c(1, 2)
+anames[index]
+
+Xs <- apply(X, 2, mean)
+Xs[2] <- Xs[1]^2
+Xs[4] <- Xs[3]^2
+Xs[6] <- Xs[5]^2
+Xs <- as.matrix(c(1, Xs))
+Xs <- matrix(rep(Xs, 2), nrow = 2, byrow = T)
+Xs[,16] <- c(1, 2) # 2 for Yes, 1 for No
+
+eXB.post<- exp(t(Xs%*%THETA.post.mat) )
+qE<-apply( eXB.post,2,quantile,probs=c(.025,.5,.975))
+
+sample_size <- c(sum(X[,16]==1), sum(X[,16]==2)) # No, Yes
+qE <- rbind(qE,sample_size)
+
+colnames(qE)<-anames
+write.csv(t(qE), paste(IMAGEOUT,"qE.media.csv",sep=""))
+
+df <- data.frame(x =1:2,
+                 F = c(qE[2,])[index],
+                 L = c(qE[1,])[index],
+                 U = c(qE[3,])[index])
+abc <- ggplot(df, aes(x = x, y = F)) +
+  labs(y = "Expected number of children ever born", x = "media access") +
+  geom_point(size = 2) +
+  ylim(2.2,2.4) +
+  geom_errorbar(aes(ymax = U, ymin = L)) +
+  scale_x_continuous(breaks = c(1:2), labels = anames[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 18, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+
+dev.print(pdf, paste(IMAGEOUT, "E_media.pdf",sep=""),width=8,height=8)
+(qE[2,][1] - qE[2,][2])/qE[2,][2]
+```
+
+
+```{r}
+library(ggplot2)
+library(sf)
+
+map <- read_sf("map.json")
+map <- map %>% arrange(ADM2_EN)
+ggplot(map) +
+  geom_sf() +
+	geom_sf_label(aes(label = ADM2_EN), size = 4)
+
+district_names[which(map$ADM2_EN != district_names)]
+```
