@@ -610,7 +610,7 @@ LAMBDA <- vcov(model)
 # THETA1 stores m rows of ad hoc estimate of regression coefficients theta1
 THETA1 <- NULL
 
-# traverse each division (total of 8)
+# traverse each districts (total of 64)
 for (dis in district_codes){
 dis_data = yX[which(wm$HH7A==dis),]
 
@@ -631,7 +631,7 @@ X.list <- list()
 wgt.list <- list()
 N <- NULL
 j <- 1
-# traverse all 8 divisions
+# traverse all 64 districts
 for (dis in district_codes){
 y.list[[j]] = y[which(wm$HH7A == dis)]
 N[[j]]<-length(which(wm$HH7A == dis))
