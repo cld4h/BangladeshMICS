@@ -604,7 +604,8 @@ model <- glm(y~., data = data.frame(yX), family=poisson)
 THETA <- mu0 <- model$coefficients
 
 # The initial variance of the MVN prior for the variance of theta
-# LAMBDA is the inverse of Fisher information matrix
+# The prior covariance matrix $\Lambda_0$ is specified as $m$ times the variance–covariance matrix of the coefficient estimates obtained from a standard Poisson regression, with $m$ equals the total number of districts to yield a weakly informative prior and to limit the influence of data reuse on posterior inference.
+PLAMBDA <- m*vcov(model)
 LAMBDA <- vcov(model)
 
 # THETA1 stores m rows of ad hoc estimate of regression coefficients theta1
@@ -792,13 +793,14 @@ for(s in 1:S)
 		cat("Current iteration index = ", s, "\n")
 		# Print current acceptance rate
 		cat("Current acceptance rate of Theta = ", round((ACCEPT.Theta.count/s)*100, digits = 2),"\n")
+    print("Current acceptance rate of Alpha:")
     print(round(ACCEPT.Alpha.count/s*100,digits=2))
     print("Current acceptance rate of Gamma:")
     print(round(ACCEPT.count/s*100,digits=2))
-    print("Alpha is:")
-    print(round(Alpha,digits=4))
-    print("Sigam2 is:")
-    print(sigma2.alpha)
+    #print("Alpha is:")
+    #print(round(Alpha,digits=4))
+    #print("Sigam2 is:")
+    #print(sigma2.alpha)
 		# save thinned coefficients
 		THETA.post<-rbind(THETA.post,t(THETA))
 		SIGMA.post<-rbind(SIGMA.post,c(Sigma))
@@ -813,7 +815,7 @@ end.time <- Sys.time()
 ## Save and load results
 
 ```{r eval=FALSE}
-RESULTPATH = "./data_output/BHGP/"
+RESULTPATH = "./data_output/123/"
 save(THETA.post, file=paste(RESULTPATH,"THETA.post.S=",S,".RData",sep=""))
 save(SIGMA.post, file=paste(RESULTPATH,"SIGMA.post.S=",S,".RData",sep=""))
 save(ALPHA.post, file=paste(RESULTPATH,"ALPHA.post.S=",S,".RData",sep=""))
@@ -827,7 +829,7 @@ save(SIGMA2.ALPHA.post, file=paste(RESULTPATH,"SIGMA2.ALPHA.post.S=",S,".RData",
 ```
 
 ```{r eval=TRUE}
-RESULTPATH = "./data_output/BHGP/"
+RESULTPATH = "./data_output/123/"
 load(paste(RESULTPATH,"THETA.post.S=",S,".RData",sep=""))
 load(paste(RESULTPATH,"SIGMA.post.S=",S,".RData",sep=""))
 load(paste(RESULTPATH,"ALPHA.post.S=",S,".RData",sep=""))
@@ -1647,21 +1649,49 @@ library(ggplot2)
 library(sf)
 yy <- NULL
 district_eCEB <- NULL
+eCEB_each_woman <- NULL
+N_thin <- (S-B)/thin
+# division_codes =list(c(0,0,1,0,0,0,0),c(0,1,0,0,0,0,0),c(1,0,0,0,0,0,0),c(1,0,0,0,0,0,0),c(1,0,0,0,0,0,0),c(0,0,0,0,1,0,0),c(0,1,0,0,0,0,0),c(0,1,0,0,0,0,0),c(0,0,0,0,1,0,0),c(0,1,0,0,0,0,0),c(0,0,1,0,0,0,0),c(0,1,0,0,0,0,0),c(0,1,0,0,0,0,0),c(0,0,0,0,0,0,0),c(0,0,0,0,0,1,0),c(0,0,0,0,0,0,0),c(0,1,0,0,0,0,0),c(0,0,0,0,0,1,0),c(0,0,0,0,0,0,0),c(0,0,0,0,0,0,0),c(0,0,0,0,0,0,1),c(0,0,0,1,0,0,0),c(0,0,1,0,0,0,0),c(1,0,0,0,0,0,0),c(0,0,1,0,0,0,0),c(0,0,0,0,1,0,0),c(0,1,0,0,0,0,0),c(0,0,1,0,0,0,0),c(0,0,0,0,0,0,0),c(0,0,0,0,0,1,0),c(0,0,1,0,0,0,0),c(0,1,0,0,0,0,0),c(0,0,0,0,0,1,0),c(0,0,0,0,0,0,0),c(0,0,1,0,0,0,0),c(0,0,0,0,0,0,0),c(0,0,0,0,0,0,1),c(0,0,1,0,0,0,0),c(0,0,0,0,0,0,0),c(0,0,0,1,0,0,0),c(0,0,0,0,1,0,0),c(0,0,1,0,0,0,0),c(0,0,0,0,0,0,0),c(0,0,0,0,0,0,0),c(0,0,0,0,1,0,0),c(0,0,0,1,0,0,0),c(0,0,0,0,0,1,0),c(0,1,0,0,0,0,0),c(0,0,0,0,1,0,0),c(0,0,0,0,0,1,0),c(1,0,0,0,0,0,0),c(1,0,0,0,0,0,0),c(0,0,0,0,0,0,0),c(0,0,0,0,1,0,0),c(0,1,0,0,0,0,0),c(0,0,0,0,0,1,0),c(0,0,1,0,0,0,0),c(0,0,0,0,0,0,0),c(0,0,0,1,0,0,0),c(0,0,0,0,1,0,0),c(0,0,0,0,0,0,1),c(0,0,0,0,0,0,1),c(0,0,0,0,0,0,0),c(0,0,0,0,0,1,0))
+
+
 for(j in 1:m)
 {
-meanpar=exp(matmul(Z.list[[j]], apply(GAMMA.post.mat[[j]],2,mean)) + matmul(X.list[[j]],as.matrix(apply(THETA.post.mat, 1, mean)) ))
-district_eCEB <- c(district_eCEB, mean(meanpar))
+Zs <- apply(Z.list[[j]], 2, mean)
+Zs[2] <- Zs[1]^2
+Zs <- c(1,Zs)
+Xs <- apply(X.list[[j]], 2, mean)
+Xs[2] <- Xs[1]^2
+Xs <- c(1,Xs)
+
+#eCEB_each_woman=exp(matmul(apply(Z.list[[j]],2,mean), GAMMA.post.mat[[j]]) + matmul(apply(X.list[[j]],2,mean),THETA.post.mat ))
+eXB.post.district <- exp(GAMMA.post.mat[[j]] %*% Zs + t(Xs %*% THETA.post.mat))
+qE <- apply(eXB.post.district,2,quantile,probs=c(0.025,0.5,.975))
+# data_column is a 4x1 matrix, with each row represents mean, 2.5%, 50%, 97.5%
+district_eCEB <- cbind(district_eCEB, qE)
 yy <- c(yy, mean(y.list[[j]]))
 }
 
+district_eCEB <- t(district_eCEB)
+colnames(district_eCEB) <- c("2.5%", "50%", "97.5%")
+rownames(district_eCEB) <- district_names
+district_eCEB[order(district_eCEB[, 2],decreasing = TRUE)[c(1:10)], ]
+
 map <- read_sf("map.json")
 map <- map %>% arrange(ADM2_EN)
-map$eCEB <- district_eCEB
+map$eCEB <- district_eCEB[,1]
 map$yy <- yy
+
+
+# --- Create the division boundary for Sylhet ---
+Sylhet_div <- map %>%
+  filter(ADM1_EN == "Sylhet") %>%
+  group_by(ADM1_EN) %>%
+  summarise(geometry = st_union(geometry))  # merge all district polygons
 
 ggplot(map) +
 	geom_sf(aes(fill = eCEB)) +
 	scale_fill_gradient(low="gray80", high="gray20") +
+#  geom_sf(data = Sylhet_div, fill = NA, color = "red", size = 1.2, linewidth = 1.5) +
 	geom_sf_label(aes(label = ADM2_EN), size = 3) +
 	labs(fill="ECEB", x="Longitude", y="Latitude") +
 	theme(
@@ -1898,8 +1928,8 @@ combined_df <- bind_rows(BP.df_other_wives, BHP.df_other_wives, BHGP.df_other_wi
 E_other_wives <- ggplot(combined_df, aes(x = x, y = F, shape = Source, group = Source)) +
   geom_point(size = 2) +
   geom_errorbar(aes(ymin = L, ymax = U )) +
-  scale_x_continuous(breaks = c(1:2), labels = c("No", "Yes")) +
-  labs(x = "Having other wives", y = "Expected number of children ever born") +
+  scale_x_continuous(breaks = c(1:2), labels = c("0", ">=1")) +
+  labs(x = "Number of other wives", y = "Expected number of children ever born") +
   scale_color_discrete(name="Models", breaks = c("BP", "BHP", "BHGP")) +
   scale_shape_discrete(name="Models", breaks = c("BP", "BHP", "BHGP")) +
   theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 18, color = "black", angle = 45, vjust = 1, hjust = 1),
@@ -1992,4 +2022,120 @@ fit_pois<- glmmTMB(formula = y~women_age+women_age2+husband_age+HH_age+women_age
 as.matrix(exp(summary(fit_genpois)$coeff$cond[,1]))
 ranef(fit_genpois)
 ranef(fit_pois)
+```
+
+
+## Posterior CI of GAMMA + THETA
+
+### To plot the posterior CI of gamma + theta coefficients of other_wives
+
+```{r}
+# stratum_vector stores the labels of all m districts
+#stratum_vector <- unique(df_sel$stratum)
+
+#index_other_wives is the index of other_wives in the regression coefficent vector GAMMA
+index_other_wives = 15
+i <- 1
+GAMMA_other_wives<- NULL
+for (dis in district_codes){
+
+	gamma_ij <- NULL
+	for (s in c(1:length(GAMMA.post))){
+		gamma_ij <- c(gamma_ij, GAMMA.post[[s]][i, index_other_wives])
+	}
+	GAMMA_other_wives <- rbind(GAMMA_other_wives, gamma_ij)
+	i <- i+1
+}
+# THETA.post.mat[2,] is the fixed effect of fixed predictor
+qE<-apply(GAMMA_other_wives+rep(THETA.post.mat[index_other_wives,],m),1,quantile,probs=c(.025,.5,.975))
+index <- order(qE[2,])
+
+df <- data.frame(x = 1:m,
+                 F = qE[2,][index],
+                 L = qE[1,][index],
+                 U = qE[3,][index])
+abc <- ggplot(df, aes(x = x, y = F)) +
+  labs(y = "Coefficients of other wives", x = NULL) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(ymax = U, ymin = L)) +
+  scale_x_continuous(breaks = c(1:m), labels = district_names[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 12, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+#dev.print(device = postscript, paste(IMAGEOUT, "E_province.eps",sep=""),width=8,height=8, horizontal = FALSE)
+dev.print(pdf, paste(IMAGEOUT, "BETA.other_wives.pdf",sep=""),width=16,height=8)
+write.csv(df, paste(IMAGEOUT,"qE.BETA.other_wives.csv",sep=""))
+```
+
+### To plot the posterior CI of gamma + theta coefficients of HH_sex
+
+```{r}
+# stratum_vector stores the labels of all m districts
+#stratum_vector <- unique(df_sel$stratum)
+
+#index_HH_sex is the index of HH_sex in the regression coefficent vector GAMMA
+index_HH_sex = 17
+i <- 1
+GAMMA_HH_sex <- NULL
+for (dis in district_codes){
+
+	gamma_ij <- NULL
+	for (s in c(1:length(GAMMA.post))){
+		gamma_ij <- c(gamma_ij, GAMMA.post[[s]][i, index_HH_sex])
+	}
+	GAMMA_HH_sex <- rbind(GAMMA_HH_sex, gamma_ij)
+	i <- i+1
+}
+# THETA.post.mat[2,] is the fixed effect of fixed predictor
+qE<-apply(GAMMA_HH_sex+rep(THETA.post.mat[index_HH_sex,],m),1,quantile,probs=c(.025,.5,.975))
+index <- order(qE[2,])
+
+df <- data.frame(x = 1:m,
+                 F = qE[2,][index],
+                 L = qE[1,][index],
+                 U = qE[3,][index])
+abc <- ggplot(df, aes(x = x, y = F)) +
+  labs(y = "Coefficients of Household Head sex", x = NULL) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(ymax = U, ymin = L)) +
+  scale_x_continuous(breaks = c(1:m), labels = district_names[index]) +
+  theme(axis.title=element_text(size=18), axis.text.x = element_text(size = 12, color = "black", angle = 45, vjust = 1, hjust = 1),
+        axis.ticks.x = element_line(color = "black", linewidth = 1),
+        axis.text.y = element_text(size = 18, color = "black"),
+        axis.ticks.y = element_line(color = "black", linewidth = 1))
+print(abc)
+#dev.print(device = postscript, paste(IMAGEOUT, "E_province.eps",sep=""),width=8,height=8, horizontal = FALSE)
+dev.print(pdf, paste(IMAGEOUT, "BETA.HH_sex.pdf",sep=""),width=16,height=8)
+write.csv(df, paste(IMAGEOUT,"qE.BETA.HH_sex.csv",sep=""))
+```
+
+DIC Calculation
+```{r}
+#
+thin=50
+thin2=2
+N_THIN=(S-B)/(thin*thin2)
+DIC_array<-array(dim=N_THIN)
+for(i in 1:N_THIN)
+{
+  DIC_i <- 0
+  for(j in 1:m)
+  {
+    DIC_i <- DIC_i + sum(-2 * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],GAMMA.post.mat[[j]][i, ]) + matmul(X.list[[j]],as.matrix(THETA.post.mat[,i]))), disppar=ALPHA.post[i,j], log=TRUE))
+  }
+  DIC_array[i] <- DIC_i
+}
+
+DIC_bar = mean(DIC_array)
+D_mean<-0
+for(j in 1:m)
+{
+  D_mean <- D_mean + sum(-2 * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],apply(GAMMA.post.mat[[j]],2,mean)) + matmul(X.list[[j]],as.matrix(apply(THETA.post.mat, 1, mean)))), disppar=apply(ALPHA.post,2,mean)[j], log=TRUE))
+}
+DIC <- 2*DIC_bar - D_mean
+# 111513.5
 ```
