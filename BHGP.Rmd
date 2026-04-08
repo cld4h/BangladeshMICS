@@ -2030,9 +2030,6 @@ ranef(fit_pois)
 ### To plot the posterior CI of gamma + theta coefficients of other_wives
 
 ```{r}
-# stratum_vector stores the labels of all m districts
-#stratum_vector <- unique(df_sel$stratum)
-
 #index_other_wives is the index of other_wives in the regression coefficent vector GAMMA
 index_other_wives = 15
 i <- 1
@@ -2069,12 +2066,60 @@ dev.print(pdf, paste(IMAGEOUT, "BETA.other_wives.pdf",sep=""),width=16,height=8)
 write.csv(df, paste(IMAGEOUT,"qE.BETA.other_wives.csv",sep=""))
 ```
 
+```{r}
+district_coeff <- abs(round(qE[2,],2))
+map <- read_sf("map.json")
+map <- map %>% arrange(ADM2_EN)
+map$district_coeff<- district_coeff
+
+ggplot(map) +
+	geom_sf(aes(fill = district_coeff)) +
+	scale_fill_gradient(low="gray80", high="gray20") +
+	geom_sf_label(aes(label = ADM2_EN), size = 3) +
+	geom_sf_label(aes(label = district_coeff), nudge_y = -0.08, size = 3) +
+	labs(fill=expression(paste("|",beta[j],"|")), x="Longitude", y="Latitude") +
+	theme(
+  legend.title = element_text(size = 30),     # Legend title size
+  legend.text = element_text(size = 20),       # Legend item text size
+	axis.title = element_text(size = 30),
+	axis.text = element_text(size = 20)
+)
+dev.print(pdf, paste(IMAGEOUT, "map_other_wives_coefficients.pdf",sep=""),width=16,height=16)
+
+```
+
+### To plot the percentage of more-than one wives per district
+
+```{r}
+district_percentage <- NULL
+for (j in 1:m){
+  dis_j <- X.list[[j]][,14] # other_wives is the 14th column of X
+  percentage <- round(sum(dis_j == 2)/length(dis_j) * 100,2)
+  district_percentage<- c(district_percentage, percentage)
+  j <- j+1
+}
+map <- read_sf("map.json")
+map <- map %>% arrange(ADM2_EN)
+map$percentage<- district_percentage
+
+ggplot(map) +
+	geom_sf(aes(fill = percentage)) +
+	scale_fill_gradient(low="gray80", high="gray20") +
+	geom_sf_label(aes(label = ADM2_EN), size = 3) +
+	geom_sf_label(aes(label = percentage), nudge_y = -0.08, size = 3) +
+	labs(fill="Percentage (%)", x="Longitude", y="Latitude") +
+	theme(
+  legend.title = element_text(size = 30),     # Legend title size
+  legend.text = element_text(size = 20),       # Legend item text size
+	axis.title = element_text(size = 30),
+	axis.text = element_text(size = 20)
+)
+dev.print(pdf, paste(IMAGEOUT, "map_other_wives_percentage.pdf",sep=""),width=16,height=16)
+```
+
 ### To plot the posterior CI of gamma + theta coefficients of HH_sex
 
 ```{r}
-# stratum_vector stores the labels of all m districts
-#stratum_vector <- unique(df_sel$stratum)
-
 #index_HH_sex is the index of HH_sex in the regression coefficent vector GAMMA
 index_HH_sex = 17
 i <- 1
@@ -2109,6 +2154,57 @@ print(abc)
 #dev.print(device = postscript, paste(IMAGEOUT, "E_province.eps",sep=""),width=8,height=8, horizontal = FALSE)
 dev.print(pdf, paste(IMAGEOUT, "BETA.HH_sex.pdf",sep=""),width=16,height=8)
 write.csv(df, paste(IMAGEOUT,"qE.BETA.HH_sex.csv",sep=""))
+```
+
+```{r}
+district_coeff <- abs(round(qE[2,],2))
+map <- read_sf("map.json")
+map <- map %>% arrange(ADM2_EN)
+map$district_coeff<- district_coeff
+
+ggplot(map) +
+	geom_sf(aes(fill = district_coeff)) +
+	scale_fill_gradient(low="gray80", high="gray20") +
+	geom_sf_label(aes(label = ADM2_EN), size = 3) +
+	geom_sf_label(aes(label = district_coeff), nudge_y = -0.08, size = 3) +
+	labs(fill=expression(paste("|",beta[j],"|")), x="Longitude", y="Latitude") +
+	theme(
+  legend.title = element_text(size = 30),     # Legend title size
+  legend.text = element_text(size = 20),       # Legend item text size
+	axis.title = element_text(size = 30),
+	axis.text = element_text(size = 20)
+)
+dev.print(pdf, paste(IMAGEOUT, "map_HH_sex_coefficients.pdf",sep=""),width=16,height=16)
+
+```
+
+### To plot the percentage of female-headed househouds in each district
+
+```{r}
+district_percentage <- NULL
+for (j in 1:m){
+  dis_j <- X.list[[j]][,16] # HH_sex is the 14th column of X
+  percentage <- round(sum(dis_j == 2)/length(dis_j) * 100,2)
+  district_percentage<- c(district_percentage, percentage)
+  j <- j+1
+}
+map <- read_sf("map.json")
+map <- map %>% arrange(ADM2_EN)
+map$percentage<- district_percentage
+
+ggplot(map) +
+	geom_sf(aes(fill = percentage)) +
+	scale_fill_gradient(low="gray80", high="gray20") +
+	geom_sf_label(aes(label = ADM2_EN), size = 3) +
+	geom_sf_label(aes(label = percentage), nudge_y = -0.08, size = 3) +
+	labs(fill="Percentage (%)", x="Longitude", y="Latitude") +
+	theme(
+  legend.title = element_text(size = 30),     # Legend title size
+  legend.text = element_text(size = 20),       # Legend item text size
+	axis.title = element_text(size = 30),
+	axis.text = element_text(size = 20)
+)
+dev.print(pdf, paste(IMAGEOUT, "map_HH_sex_female_percentage.pdf",sep=""),width=16,height=16)
 ```
 
 DIC Calculation

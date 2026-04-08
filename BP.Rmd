@@ -939,3 +939,20 @@ save(BP.df_HH_sex, file=paste(IMAGEOUT,"BP.df_HH_sex.RData",sep=""))
 dev.print(pdf, paste(IMAGEOUT, "E_HH_sex.pdf",sep=""),width=8,height=8)
 (qE[2,][1] - qE[2,][2])/qE[2,][2]
 ```
+
+
+DIC Calculation
+```{r}
+N_THIN=(S-B)/(thin)
+DIC_array<-array(dim=N_THIN)
+for(i in 1:N_THIN)
+{
+  DIC_i <- sum(-2 * dpois(y, lambda=exp(matmul(X,as.matrix(THETA.post.mat[,i]) )),log=TRUE))
+  DIC_array[i] <- DIC_i
+}
+
+DIC_bar = mean(DIC_array)
+D_mean <- sum(-2 * dpois(y, lambda=exp(matmul(X,as.matrix(apply(THETA.post.mat, 1, mean)) )),log=TRUE))
+DIC <- 2*DIC_bar - D_mean
+# 111691
+```

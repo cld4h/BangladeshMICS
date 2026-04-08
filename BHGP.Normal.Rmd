@@ -1559,3 +1559,32 @@ ggplot(map) +
 
 district_names[which(map$ADM2_EN != district_names)]
 ```
+
+DIC Calculation
+```{r}
+#
+thin=50
+thin2=1
+N_THIN=(S-B)/(thin*thin2)
+DIC_array<-array(dim=N_THIN)
+for(i in 1:N_THIN)
+{
+  DIC_i <- 0
+  for(j in 1:m)
+  {
+    DIC_i <- DIC_i + sum(-2 * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],GAMMA.post.mat[[j]][i, ]) + matmul(X.list[[j]],as.matrix(THETA.post.mat[,i]))), disppar=ALPHA.post[i,j], log=TRUE))
+  }
+  DIC_array[i] <- DIC_i
+}
+
+DIC_bar = mean(DIC_array)
+D_mean<-0
+for(j in 1:m)
+{
+  D_mean <- D_mean + sum(-2 * dgenpois2(y.list[[j]],
+				meanpar=exp(matmul(Z.list[[j]],apply(GAMMA.post.mat[[j]],2,mean)) + matmul(X.list[[j]],as.matrix(apply(THETA.post.mat, 1, mean)))), disppar=apply(ALPHA.post,2,mean)[j], log=TRUE))
+}
+DIC <- 2*DIC_bar - D_mean
+# 139656.7
+```

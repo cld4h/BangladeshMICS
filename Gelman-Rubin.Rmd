@@ -1,0 +1,35 @@
+
+```{r eval=TRUE}
+library(coda)
+S=55000
+B=5000
+thin=50
+thin2=1
+RESULTPATH = "./data_output/123/"
+load(paste(RESULTPATH,"THETA.post.S=",S,".RData",sep=""))
+# Thin again, Keep only even rows
+THETA.even <- THETA.post[seq(2, nrow(THETA.post), by = 2), ]
+# Apply unlist() to each row, then row-bind results
+THETA.mat.123 <- t(apply(THETA.even, 1, unlist))
+THETA.mcmc.123 <- as.mcmc(THETA.mat.123)
+
+RESULTPATH = "./data_output/456/"
+load(paste(RESULTPATH,"THETA.post.S=",S,".RData",sep=""))
+THETA.even <- THETA.post[seq(2, nrow(THETA.post), by = 2), ]
+THETA.mat.456 <- t(apply(THETA.even, 1, unlist))
+THETA.mcmc.456 <- as.mcmc(THETA.mat.456)
+
+RESULTPATH = "./data_output/789/"
+load(paste(RESULTPATH,"THETA.post.S=",S,".RData",sep=""))
+THETA.even <- THETA.post[seq(2, nrow(THETA.post), by = 2), ]
+THETA.mat.789 <- t(apply(THETA.even, 1, unlist))
+THETA.mcmc.789 <- as.mcmc(THETA.mat.789)
+
+THETA.post.list <- as.mcmc.list(list(THETA.mcmc.123,THETA.mcmc.456,THETA.mcmc.789))
+
+GD <- gelman.diag(THETA.post.list)
+gelman.plot(THETA.post.list)
+#load(paste(RESULTPATH,"SIGMA.post.S=",S,".RData",sep=""))
+#load(paste(RESULTPATH,"GAMMA.post.S=",S,".RData",sep=""))
+
+```
